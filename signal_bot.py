@@ -4,18 +4,15 @@ import asyncio
  import ccxt.async_support as ccxt
  import pandas as pd
  from telegram import Bot
- # ========== 配置（也可以不动，优先读环境变量） ==========
  TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
  CHAT_ID = os.getenv("CHAT_ID")
  SYMBOLS = ["SOL/USDT", "ETH/USDT", "BTC/USDT"]
  TIMEFRAME = "15m"
- CHECK_INTERVAL = 30  # 每轮扫描间隔，单位：秒
- COOLDOWN_SECONDS = 600  # 同一个品种 + 同方向冷却：10 分钟
- # ========================================================
+ CHECK_INTERVAL = 30
+ COOLDOWN_SECONDS = 600
  bot = Bot(token=TELEGRAM_TOKEN)
- last_signal = dict()  # key: f"{symbol}|{side}"
+ last_signal = dict()
  def get_cn_time() -> str:
-     """东八区时间"""
      return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
  async def send_signal(symbol: str, side: str, price: float, reason: str):
      emoji = "🟢" if side == "做多" else "🔴"
@@ -31,7 +28,6 @@ import asyncio
      try:
          ohlcv = await exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=100)
          df = pd.DataFrame(ohlcv, columns=["time", "open", "high", "low", "close", "volume"])
-         # 和 TradingView 对齐的 EMA
          df["ema20"] = df["close"].ewm(span=20, adjust=False).mean()
          df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
          last = df.iloc[-1]
@@ -40,13 +36,11 @@ import asyncio
          key_long = f"{symbol}|做多"
          key_short = f"{symbol}|做空"
          now_ts = datetime.utcnow().timestamp()
-         # 金叉：EMA20 上穿 EMA50 → 做多
          if prev["ema20"] <= prev["ema50"] and last["ema20"] > last["ema50"]:
              if key_long not in last_signal or (now_ts - last_signal[key_long]) > COOLDOWN_SECONDS:
                  await send_signal(symbol, "做多", price, "EMA20 上穿 EMA50，金叉")
                  last_signal[key_long] = now_ts
                  return True
-         # 死叉：EMA20 下穿 EMA50 → 做空
          if prev["ema20"] >= prev["ema50"] and last["ema20"] < last["ema50"]:
              if key_short not in last_signal or (now_ts - last_signal[key_short]) > COOLDOWN_SECONDS:
                  await send_signal(symbol, "做空", price, "EMA20 下穿 EMA50，死叉")
@@ -64,10 +58,10 @@ import asyncio
          "enableRateLimit": True,
          "timeout": 15000
      })
-     print(f"[{get_cn_time()}] ✅ 信号机器人启动成功，监控：{SYMBOLS}")
+     print(f"[{get_cn_time()}] ✅【新版】signal-bot 启动成功，监控：{SYMBOLS}")
      await bot.send_message(
          chat_id=CHAT_ID,
-         text=f"✅ 监控已启动\n标的：{', '.join(SYMBOLS)}\n周期：{TIMEFRAME}\n冷却：{COOLDOWN_SECONDS//60} 分钟",
+         text="✅【新版】监控已启动\n标的：SOL/USDT、ETH/USDT、BTC/USDT\n周期：15m\n同方向冷却：10 分钟",
          parse_mode="HTML"
      )
      while True:
